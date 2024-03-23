@@ -1530,11 +1530,13 @@ pub fn verify_bls_signatures() -> bool {
 mod tests {
     use std::str::FromStr;
 
+    use ark_bls12_381::{G1Affine, G2Affine};
+    use ark_ec::AffineRepr;
     use num_bigint::BigUint;
 
-    use crate::native::sub_u32_slices_12;
+    use crate::native::{sub_u32_slices_12, Fp};
 
-    use super::{verify_bls_signatures, Fp12, modulus, get_u32_vec_from_literal};
+    use super::{get_u32_vec_from_literal, miller_loop, modulus, verify_bls_signatures, Fp12, Fp2, Fp6};
 
     #[test]
     pub fn test_bls_signature_verification() {
@@ -1561,6 +1563,53 @@ mod tests {
         let mu_finaexp = aa_fp12.final_exponentiate();
         mu_finaexp.print();
         assert_eq!(mu_finaexp, Fp12::one())
+    }
+
+    #[test]
+    fn test_miller_loop_g1_generator() {
+        // reference: https://github.com/arkworks-rs/curves/blob/e2d16a27e2cfa9f972ae9772df827a22730011b4/bls12_381/src/curves/g1.rs#L193
+        let g1_generator_x: BigUint = BigUint::from_str("3685416753713387016781088315183077757961620795782546409894578378688607592378376318836054947676345821548104185464507").unwrap();
+        let g1_generator_y: BigUint = BigUint::from_str("1339506544944476473020471379941921221584933875938349620426543736416511423956333506472724655353366534992391756441569").unwrap();
+        let g1_generator_x = Fp::get_fp_from_biguint(g1_generator_x);
+        let g1_generator_y = Fp::get_fp_from_biguint(g1_generator_y);
+        let g2_identity_x = Fp2::zero();
+        let g2_identity_y = Fp2::zero();
+        let g2_identity_inf = Fp2::one();
+
+        let mlr = miller_loop(g1_generator_x, g1_generator_y, g2_identity_x, g2_identity_y, g2_identity_inf);
+        let one = Fp12::one();
+        assert_eq!(mlr, one);
+    }
+
+    #[test]
+    fn test_miller_loop_g2_generator() {
+        // reference: https://github.com/arkworks-rs/curves/blob/e2d16a27e2cfa9f972ae9772df827a22730011b4/bls12_381/src/curves/g2.rs#L222
+        let g2_generator_x_c0: BigUint = BigUint::from_str("352701069587466618187139116011060144890029952792775240219908644239793785735715026873347600343865175952761926303160").unwrap();
+        let g2_generator_x_c0 = Fp::get_fp_from_biguint(g2_generator_x_c0);
+
+        let g2_generator_x_c1: BigUint = BigUint::from_str("3059144344244213709971259814753781636986470325476647558659373206291635324768958432433509563104347017837885763365758").unwrap();
+        let g2_generator_x_c1 = Fp::get_fp_from_biguint(g2_generator_x_c1);
+
+
+        let g2_generator_y_c0: BigUint = BigUint::from_str("1985150602287291935568054521177171638300868978215655730859378665066344726373823718423869104263333984641494340347905").unwrap();
+        let g2_generator_y_c0 = Fp::get_fp_from_biguint(g2_generator_y_c0);
+
+        let g2_generator_y_c1: BigUint = BigUint::from_str("927553665492332455747201965776037880757740193453592970025027978793976877002675564980949289727957565575433344219582").unwrap();
+        let g2_generator_y_c1 = Fp::get_fp_from_biguint(g2_generator_y_c1);
+
+        let g1_generator_x = Fp::zero();
+        let g1_generator_y = Fp::zero();
+        let mut g2_identity_x = Fp2::zero();
+        g2_identity_x.0[0] = g2_generator_x_c0;
+        g2_identity_x.0[1] = g2_generator_x_c1;
+        let mut g2_identity_y = Fp2::zero();
+        g2_identity_y.0[0] = g2_generator_y_c0;
+        g2_identity_y.0[1] = g2_generator_y_c1;
+        let g2_identity_inf = Fp2::zero();
+        
+        let mlr = miller_loop(g1_generator_x, g1_generator_y, g2_identity_x, g2_identity_y, g2_identity_inf);
+        let one = Fp12::one();
+        assert_eq!(mlr, one);
     }
 
     #[test]

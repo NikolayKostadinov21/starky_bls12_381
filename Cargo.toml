@@ -10,6 +10,8 @@ plonky2 = { git = "https://github.com/Electron-Labs/plonky2", branch = "derive_b
 starky = { git = "https://github.com/Electron-Labs/plonky2", branch = "derive_bn254_from_ff"}
 plonky2_crypto = { git = "https://github.com/Electron-Labs/plonky2-crypto" }
 anyhow = "1.0.40"
+ark-bls12-381 = "0.4.0"
+ark-ec = "0.4.2"
 hex = "0.4"
 to-binary = "0.4.0"
 num-bigint = "0.4.4"
