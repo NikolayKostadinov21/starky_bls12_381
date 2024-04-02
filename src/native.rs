@@ -1,13 +1,13 @@
 // BLS Native
 
-use std::ops::{Add, Sub, Neg, Mul, Div};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use std::{str::FromStr, vec};
 
-
+use ark_bls12_381::{Fq, Fq12, Fq2, Fq6};
 use num_bigint::{BigInt, BigUint, Sign, ToBigInt};
 
-use crate::big_arithmetic::{big_add, big_less_than, self};
+use crate::big_arithmetic::{self, big_add, big_less_than};
 
 pub fn modulus() -> BigUint {
     BigUint::from_str("4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787").unwrap()
@@ -28,10 +28,7 @@ pub fn get_negate(y: &[u32; 12]) -> [u32; 12] {
 }
 
 pub fn get_g2_invert(z1: &[u32; 12], z2: &[u32; 12]) -> [[u32; 12]; 2] {
-    let fp2 = Fp2([
-        Fp(z1.clone()),
-        Fp(z2.clone())
-    ]);
+    let fp2 = Fp2([Fp(z1.clone()), Fp(z2.clone())]);
     [fp2.invert().0[0].0, fp2.invert().0[1].0]
 }
 
@@ -39,27 +36,34 @@ pub fn get_u32_carries(x: &[u32; 12], y: &[u32; 12]) -> [u32; 12] {
     let mut carries = [0u32; 12];
     let mut prev_carry = 0;
     for i in 0..12 {
-        if i!=0{
-            prev_carry = carries[i-1];
+        if i != 0 {
+            prev_carry = carries[i - 1];
         }
         let z = (x[i] as u64) + (y[i] as u64) + (prev_carry as u64);
-        println!("i-{:?}--x:: {:?}, y:: {:?}, z:: {:?}, carry:: {:?}",i,x[i], y[i], prev_carry,(z>>32) as u32);
-        if i!=11
-         {carries[i] = (z>>32) as u32 }
+        println!(
+            "i-{:?}--x:: {:?}, y:: {:?}, z:: {:?}, carry:: {:?}",
+            i,
+            x[i],
+            y[i],
+            prev_carry,
+            (z >> 32) as u32
+        );
+        if i != 11 {
+            carries[i] = (z >> 32) as u32
+        }
     }
     carries[11] = 0;
     carries
 }
 
-
-pub fn multiply_by_slice(x: &[u32; 12], y: u32) -> ([u32; 13],[u32; 12]) {
+pub fn multiply_by_slice(x: &[u32; 12], y: u32) -> ([u32; 13], [u32; 12]) {
     let mut res: [u32; 13] = [0u32; 13];
     let mut carries: [u32; 12] = [0u32; 12];
     let mut prev_carry = 0;
     for i in 0..12 {
         let temp = (x[i] as u64 * y as u64) + prev_carry as u64;
         let temp_res = temp as u32;
-        let new_carry = (temp>>32) as u32;
+        let new_carry = (temp >> 32) as u32;
         prev_carry = new_carry;
         res[i] = temp_res;
         carries[i] = prev_carry;
@@ -105,7 +109,7 @@ pub fn sub_u32_slices(x: &[u32; 24], y: &[u32; 24]) -> ([u32; 24], [u32; 24]) {
     let mut borrows = [0u32; 24];
     for i in 0..24 {
         if x[i] >= y[i] + prev_borrow {
-            res[i] = x[i]-y[i]-prev_borrow;
+            res[i] = x[i] - y[i] - prev_borrow;
             borrows[i] = 0;
             prev_borrow = 0;
         } else {
@@ -124,7 +128,7 @@ pub fn sub_u32_slices_12(x: &[u32; 12], y: &[u32; 12]) -> ([u32; 12], [u32; 12])
     let mut borrows = [0u32; 12];
     for i in 0..12 {
         if x[i] >= y[i] + prev_borrow {
-            res[i] = x[i]-y[i]-prev_borrow;
+            res[i] = x[i] - y[i] - prev_borrow;
             borrows[i] = 0;
             prev_borrow = 0;
         } else {
@@ -197,10 +201,10 @@ pub fn egcd(a: BigUint, b: BigUint) -> BigUint {
 
     let zero = BigInt::from_str("0").unwrap();
     while a_ != zero {
-        let q = b_.clone()/a_.clone();
-        let r = b_%a_.clone();
-        let m = x-(u.clone()*q.clone());
-        let n = y-(v.clone()*q);
+        let q = b_.clone() / a_.clone();
+        let r = b_ % a_.clone();
+        let m = x - (u.clone() * q.clone());
+        let n = y - (v.clone() * q);
         b_ = a_;
         a_ = r;
         x = u;
@@ -211,9 +215,11 @@ pub fn egcd(a: BigUint, b: BigUint) -> BigUint {
     // println!("x {:?}", x);
     let mod_bigint = modulus().to_bigint().unwrap();
     if x < 0.into() {
-        ((x%mod_bigint.clone())+mod_bigint).to_biguint().unwrap()
+        ((x % mod_bigint.clone()) + mod_bigint)
+            .to_biguint()
+            .unwrap()
     } else {
-        (x%mod_bigint.clone()).to_biguint().unwrap()
+        (x % mod_bigint.clone()).to_biguint().unwrap()
     }
 }
 
@@ -225,10 +231,7 @@ pub fn mod_inverse(a: BigUint, m: BigUint) -> BigUint {
 pub fn fp4_square(a: Fp2, b: Fp2) -> (Fp2, Fp2) {
     let a2 = a * a;
     let b2 = b * b;
-    (
-        b2.mul_by_nonresidue()+a2,
-        ((a+b)*(a+b)) - a2 - b2
-    )
+    (b2.mul_by_nonresidue() + a2, ((a + b) * (a + b)) - a2 - b2)
 }
 
 pub fn get_u32_vec_from_literal(x: BigUint) -> [u32; 12] {
@@ -252,7 +255,7 @@ pub fn get_selector_bits_from_u32(x: u32) -> [u32; 12] {
     let mut res = [0u32; 12];
     let mut val = x.clone();
     for i in 0..12 {
-        res[i] = val&1;
+        res[i] = val & 1;
         val = val >> 1;
     }
     res
@@ -275,8 +278,8 @@ pub fn get_u32_vec_from_literal_ref_24(x: &BigUint) -> [u32; 24] {
 }
 
 pub fn get_div_rem_modulus_from_biguint_12(x: BigUint) -> ([u32; 12], [u32; 12]) {
-    let rem = x.clone()%modulus();
-    let div = x/modulus();
+    let rem = x.clone() % modulus();
+    let div = x / modulus();
     (get_u32_vec_from_literal(div), get_u32_vec_from_literal(rem))
 }
 
@@ -286,7 +289,7 @@ pub fn calc_qs(x: Fp2, y: Fp2, z: Fp2) -> (Fp2, Fp2, Fp2) {
 
     let qx = ax.clone();
     let qy = ay.clone();
-    let qz = Fp2::one(); 
+    let qz = Fp2::one();
     (qx, qy, qz)
 }
 
@@ -300,15 +303,15 @@ pub fn calc_precomp_stuff_loop0(rx: Fp2, ry: Fp2, rz: Fp2) -> Vec<Fp2> {
     let t3 = t2.mul(Fp::get_fp_from_biguint(BigUint::from(3 as u32)));
     let x1 = ry * rz;
     let t4 = x1.mul(Fp::get_fp_from_biguint(BigUint::from(2 as u32)));
-    let x2 = t2-t0;
-    let x3 = rx*rx;
+    let x2 = t2 - t0;
+    let x3 = rx * rx;
     let x4 = x3.mul(Fp::get_fp_from_biguint(BigUint::from(3 as u32)));
     let x5 = -t4;
 
     let k = mod_inverse(BigUint::from(2 as u32), modulus());
 
-    let x6 = t0-t3;
-    let x7 = rx*ry;
+    let x6 = t0 - t3;
+    let x7 = rx * ry;
     let x8 = x6 * x7;
 
     let x9 = t0 + t3;
@@ -322,7 +325,10 @@ pub fn calc_precomp_stuff_loop0(rx: Fp2, ry: Fp2, rz: Fp2) -> Vec<Fp2> {
     let new_ry = x11 - x13;
     let new_rz = t0 * t4;
 
-    vec![new_rx, new_ry, new_rz, t0, t1, x0, t2, t3, x1, t4, x3, x2, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13]
+    vec![
+        new_rx, new_ry, new_rz, t0, t1, x0, t2, t3, x1, t4, x3, x2, x4, x5, x6, x7, x8, x9, x10,
+        x11, x12, x13,
+    ]
 }
 
 pub fn calc_precomp_stuff_loop1(rx: Fp2, ry: Fp2, rz: Fp2, qx: Fp2, qy: Fp2) -> Vec<Fp2> {
@@ -339,11 +345,11 @@ pub fn calc_precomp_stuff_loop1(rx: Fp2, ry: Fp2, rz: Fp2, qx: Fp2, qy: Fp2) -> 
     // println!("ell_coeff_1_0 {:?}", ell_coeff[1][0].to_biguint());
     // println!("ell_coeff_1_1 {:?}", ell_coeff[1][1].to_biguint());
     // println!("ell_coeff_1_2 {:?}", ell_coeff[1][2].to_biguint());
-    let bit1_t8 = bit1_t3*bit1_t3;
+    let bit1_t8 = bit1_t3 * bit1_t3;
     // println!("t2__ {:?}", bit1_t8.to_biguint());
     let bit1_t9 = bit1_t8 * bit1_t3;
     // println!("t3__ {:?}", bit1_t9.to_biguint());
-    let bit1_t10 = bit1_t8* rx;
+    let bit1_t10 = bit1_t8 * rx;
     // println!("t4__ {:?}", bit1_t10.to_biguint());
     let bit1_t11 = bit1_t1 * bit1_t1;
     let bit1_t12 = bit1_t11 * rz;
@@ -359,9 +365,9 @@ pub fn calc_precomp_stuff_loop1(rx: Fp2, ry: Fp2, rz: Fp2, qx: Fp2, qy: Fp2) -> 
     let new_rz = rz * bit1_t9;
 
     vec![
-        new_rx, new_ry, new_rz, bit1_t0, bit1_t1, bit1_t2, bit1_t3,
-        bit1_t4, bit1_t5, bit1_t6, bit1_t7, bit1_t8, bit1_t9, bit1_t10,
-        bit1_t11, bit1_t12, bit1_t13, bit1_t14, bit1_t15, bit1_t16, bit1_t17, bit1_t18
+        new_rx, new_ry, new_rz, bit1_t0, bit1_t1, bit1_t2, bit1_t3, bit1_t4, bit1_t5, bit1_t6,
+        bit1_t7, bit1_t8, bit1_t9, bit1_t10, bit1_t11, bit1_t12, bit1_t13, bit1_t14, bit1_t15,
+        bit1_t16, bit1_t17, bit1_t18,
     ]
 }
 
@@ -372,7 +378,7 @@ impl Fp {
     pub fn zero() -> Fp {
         Fp([0; 12])
     }
-    
+
     pub fn one() -> Fp {
         let mut x = Fp([0; 12]);
         x.0[0] = 1;
@@ -438,11 +444,9 @@ impl Neg for Fp {
 
     fn neg(self) -> Self::Output {
         let x: BigUint = BigUint::new(self.0.try_into().unwrap());
-        Fp(get_u32_vec_from_literal(modulus()-x))
+        Fp(get_u32_vec_from_literal(modulus() - x))
     }
 }
-
-
 
 impl Sub for Fp {
     type Output = Self;
@@ -501,7 +505,7 @@ pub fn mul_fp_without_reduction(x: Fp, y: Fp) -> [u32; 24] {
 
 pub fn negate_fp(x: Fp) -> Fp {
     let x: BigUint = BigUint::new(x.0.try_into().unwrap());
-    Fp(get_u32_vec_from_literal(modulus()-x))
+    Fp(get_u32_vec_from_literal(modulus() - x))
 }
 
 pub fn sub_fp(x: Fp, y: Fp) -> Fp {
@@ -513,8 +517,8 @@ pub fn sub_fp(x: Fp, y: Fp) -> Fp {
     Fp(get_u32_vec_from_literal(z))
 }
 
-pub fn sum_of_products(a: Vec<Fp>, b: Vec<Fp>) -> Fp{
-    let acc = a.iter().zip(b.iter()).fold(Fp([0; 12]),|acc, (a_i, b_i)| {
+pub fn sum_of_products(a: Vec<Fp>, b: Vec<Fp>) -> Fp {
+    let acc = a.iter().zip(b.iter()).fold(Fp([0; 12]), |acc, (a_i, b_i)| {
         add_fp(mul_fp(a_i.clone(), b_i.clone()), acc)
     });
     acc
@@ -533,19 +537,19 @@ impl Fp2 {
     }
 
     pub fn non_residue() -> Fp {
-        Fp::get_fp_from_biguint(modulus()-BigUint::from(1 as u32))
+        Fp::get_fp_from_biguint(modulus() - BigUint::from(1 as u32))
     }
 
     pub fn multiply_by_b(&self) -> Fp2 {
         let t0 = self.0[0].mul(Fp::get_fp_from_biguint(BigUint::from(4 as u32)));
         let t1 = self.0[1].mul(Fp::get_fp_from_biguint(BigUint::from(4 as u32)));
-        Fp2([t0-t1, t0+t1])
+        Fp2([t0 - t1, t0 + t1])
     }
 
     pub fn mul_by_nonresidue(&self) -> Self {
         let c0 = self.0[0];
         let c1 = self.0[1];
-        Fp2([c0-c1, c0+c1])
+        Fp2([c0 - c1, c0 + c1])
     }
 
     pub fn invert(&self) -> Self {
@@ -553,10 +557,7 @@ impl Fp2 {
         let im = self.0[1];
         let factor_fp = (re * re) + (im * im);
         let factor = factor_fp.invert();
-        Fp2([
-            factor * re,
-            factor * (-im)
-        ])
+        Fp2([factor * re, factor * (-im)])
     }
 
     pub fn to_biguint(&self) -> [BigUint; 2] {
@@ -566,10 +567,8 @@ impl Fp2 {
         ]
     }
 
-    pub fn get_u32_slice(&self) -> [[u32;12]; 2] {
-        [
-            self.0[0].0,self.0[1].0
-        ]
+    pub fn get_u32_slice(&self) -> [[u32; 12]; 2] {
+        [self.0[0].0, self.0[1].0]
     }
 }
 
@@ -577,7 +576,7 @@ impl Add for Fp2 {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-       add_fp2(self, rhs)
+        add_fp2(self, rhs)
     }
 }
 
@@ -585,7 +584,7 @@ impl Mul for Fp2 {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
-       mul_fp2(self, rhs)
+        mul_fp2(self, rhs)
     }
 }
 
@@ -677,8 +676,8 @@ impl Mul<Fp> for Fp2 {
         //     }
         // }
         let fp2 = self.0;
-        
-        let ans = Fp2([fp2[0]*rhs, fp2[1]*rhs]);
+
+        let ans = Fp2([fp2[0] * rhs, fp2[1] * rhs]);
         ans
     }
 }
@@ -692,21 +691,19 @@ impl Neg for Fp2 {
 }
 
 pub fn sub_fp2(x: Fp2, y: Fp2) -> Fp2 {
-    Fp2 ([sub_fp(x.0[0],y.0[0]),sub_fp(x.0[1],y.0[1])])
+    Fp2([sub_fp(x.0[0], y.0[0]), sub_fp(x.0[1], y.0[1])])
 }
 
 pub fn add_fp2(x: Fp2, y: Fp2) -> Fp2 {
-    Fp2 ([add_fp(x.0[0],y.0[0]),add_fp(x.0[1],y.0[1])])
+    Fp2([add_fp(x.0[0], y.0[0]), add_fp(x.0[1], y.0[1])])
 }
 
 pub fn mul_fp2(x: Fp2, y: Fp2) -> Fp2 {
     //println!("x:: {:?}", x);
     //println!("y:: {:?}", y);
-    let c0 = sub_fp(mul_fp(x.0[0], y.0[0]),mul_fp(x.0[1], y.0[1]));
-    let c1 = add_fp(mul_fp(x.0[0], y.0[1]),mul_fp(x.0[1], y.0[0]));
-    Fp2 (
-        [c0, c1]
-    )
+    let c0 = sub_fp(mul_fp(x.0[0], y.0[0]), mul_fp(x.0[1], y.0[1]));
+    let c1 = add_fp(mul_fp(x.0[0], y.0[1]), mul_fp(x.0[1], y.0[0]));
+    Fp2([c0, c1])
 }
 
 // pub fn mul_fp2_without_reduction(x: Fp2, y: Fp2) -> Fp2 {
@@ -714,7 +711,7 @@ pub fn mul_fp2(x: Fp2, y: Fp2) -> Fp2 {
 // }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Fp6(pub(crate) [Fp;6]);
+pub struct Fp6(pub(crate) [Fp; 6]);
 
 impl Fp6 {
     pub fn invert(&self) -> Self {
@@ -726,15 +723,19 @@ impl Fp6 {
         let t1 = (c2 * c2).mul_by_nonresidue() - (c0 * c1);
         let t2 = (c1 * c1) - (c0 * c2);
         let t4 = (((c2 * t1) + (c1 * t2)).mul_by_nonresidue() + (c0 * t0)).invert();
-        Fp6([
-            (t4*t0).0,
-            (t4 * t1).0,
-            (t4 * t2).0,
-        ].concat().try_into().unwrap())
+        Fp6([(t4 * t0).0, (t4 * t1).0, (t4 * t2).0]
+            .concat()
+            .try_into()
+            .unwrap())
     }
 
     pub fn get_u32_slice(&self) -> [[u32; 12]; 6] {
-        self.0.iter().map(|f| f.0).collect::<Vec<[u32; 12]>>().try_into().unwrap()
+        self.0
+            .iter()
+            .map(|f| f.0)
+            .collect::<Vec<[u32; 12]>>()
+            .try_into()
+            .unwrap()
     }
 
     pub fn print(&self) {
@@ -787,33 +788,32 @@ impl Neg for Fp6 {
         let c0 = Fp2(c0c1c2.0[0..2].to_vec().try_into().unwrap());
         let c1 = Fp2(c0c1c2.0[2..4].to_vec().try_into().unwrap());
         let c2 = Fp2(c0c1c2.0[4..6].to_vec().try_into().unwrap());
-        Fp6([
-            c0.neg().0,
-            c1.neg().0,
-            c2.neg().0,
-        ].concat().try_into().unwrap())
+        Fp6([c0.neg().0, c1.neg().0, c2.neg().0]
+            .concat()
+            .try_into()
+            .unwrap())
     }
 }
 
 pub fn add_fp6(x: Fp6, y: Fp6) -> Fp6 {
     Fp6([
-        add_fp(x.0[0],y.0[0]), 
-        add_fp(x.0[1],y.0[1]), 
-        add_fp(x.0[2],y.0[2]), 
-        add_fp(x.0[3],y.0[3]), 
-        add_fp(x.0[4],y.0[4]), 
-        add_fp(x.0[5],y.0[5]), 
+        add_fp(x.0[0], y.0[0]),
+        add_fp(x.0[1], y.0[1]),
+        add_fp(x.0[2], y.0[2]),
+        add_fp(x.0[3], y.0[3]),
+        add_fp(x.0[4], y.0[4]),
+        add_fp(x.0[5], y.0[5]),
     ])
 }
 
 pub fn sub_fp6(x: Fp6, y: Fp6) -> Fp6 {
     Fp6([
-        sub_fp(x.0[0],y.0[0]), 
-        sub_fp(x.0[1],y.0[1]), 
-        sub_fp(x.0[2],y.0[2]), 
-        sub_fp(x.0[3],y.0[3]), 
-        sub_fp(x.0[4],y.0[4]), 
-        sub_fp(x.0[5],y.0[5]), 
+        sub_fp(x.0[0], y.0[0]),
+        sub_fp(x.0[1], y.0[1]),
+        sub_fp(x.0[2], y.0[2]),
+        sub_fp(x.0[3], y.0[3]),
+        sub_fp(x.0[4], y.0[4]),
+        sub_fp(x.0[5], y.0[5]),
     ])
 }
 /*
@@ -830,32 +830,32 @@ pub fn mul_fp6(x: Fp6, y: Fp6) -> Fp6 {
     let r1 = Fp2([y.0[2], y.0[3]]);
     let r2 = Fp2([y.0[4], y.0[5]]);
 
-    let t0 = c0*r0;
-    let t1 = c1*r1;
-    let t2 = c2*r2;
+    let t0 = c0 * r0;
+    let t1 = c1 * r1;
+    let t2 = c2 * r2;
 
-    let t3 = c1+c2;
-    let t4 = r1+r2;
-    let t5 = t3*t4;
-    let t6 = t5-t1;
-    let t7 = t6-t2;
+    let t3 = c1 + c2;
+    let t4 = r1 + r2;
+    let t5 = t3 * t4;
+    let t6 = t5 - t1;
+    let t7 = t6 - t2;
     let t8 = t7.mul_by_nonresidue();
-    let x = t8+t0;
+    let x = t8 + t0;
 
-    let t9 = c0+c1;
-    let t10 = r0+r1;
-    let t11 = t9*t10;
-    let t12 = t11-t0;
-    let t13 = t12-t1;
+    let t9 = c0 + c1;
+    let t10 = r0 + r1;
+    let t11 = t9 * t10;
+    let t12 = t11 - t0;
+    let t13 = t12 - t1;
     let t14 = t2.mul_by_nonresidue();
-    let y = t13+t14;
+    let y = t13 + t14;
 
-    let t15 = c0+c2;
-    let t16 = r0+r2;
-    let t17 = t15*t16;
-    let t18 = t17-t0;
-    let t19 = t18-t2;
-    let z = t19+t1;
+    let t15 = c0 + c2;
+    let t16 = r0 + r2;
+    let t17 = t15 * t16;
+    let t18 = t17 - t0;
+    let t19 = t18 - t2;
+    let z = t19 + t1;
 
     Fp6([x.0[0], x.0[1], y.0[0], y.0[1], z.0[0], z.0[1]])
 }
@@ -878,24 +878,22 @@ impl Fp6 {
         let c1 = Fp2(self.0[2..4].to_vec().try_into().unwrap());
         let c2 = Fp2(self.0[4..6].to_vec().try_into().unwrap());
 
-        let t0 = c0*b0;
-        let t1 = c1*b1;
+        let t0 = c0 * b0;
+        let t1 = c1 * b1;
 
-        let t2 = c2*b1;
+        let t2 = c2 * b1;
         let t3 = t2.mul_by_nonresidue();
-        let x = t3+t0;
+        let x = t3 + t0;
 
-        let t4 = b0+b1;
-        let t5 = c0+c1;
-        let t6 = t4*t5;
-        let t7 = t6-t0;
-        let y = t7-t1;
+        let t4 = b0 + b1;
+        let t5 = c0 + c1;
+        let t6 = t4 * t5;
+        let t7 = t6 - t0;
+        let y = t7 - t1;
 
-        let t8 = c2*b0;
-        let z = t8+t1;
-        Fp6([
-            x.0, y.0, z.0
-        ].concat().try_into().unwrap())
+        let t8 = c2 * b0;
+        let z = t8 + t1;
+        Fp6([x.0, y.0, z.0].concat().try_into().unwrap())
     }
 
     pub fn multiply_by_1(&self, b1: Fp2) -> Self {
@@ -903,17 +901,13 @@ impl Fp6 {
         let c1 = Fp2(self.0[2..4].to_vec().try_into().unwrap());
         let c2 = Fp2(self.0[4..6].to_vec().try_into().unwrap());
 
-        let t0 = c2*b1;
+        let t0 = c2 * b1;
         let x = t0.mul_by_nonresidue();
 
-        let y = c0*b1;
+        let y = c0 * b1;
 
-        let z = c1*b1;
-        Fp6([
-            x.0,
-            y.0,
-            z.0,
-        ].concat().try_into().unwrap())
+        let z = c1 * b1;
+        Fp6([x.0, y.0, z.0].concat().try_into().unwrap())
     }
 }
 
@@ -930,11 +924,8 @@ impl Fp12 {
     pub fn invert(&self) -> Self {
         let c0 = Fp6(self.0[0..6].try_into().unwrap());
         let c1 = Fp6(self.0[6..12].try_into().unwrap());
-        let t = (c0 * c0 - mul_by_nonresidue((c1*c1).0)).invert();
-        Fp12([
-            (c0*t).0,
-            (-(c1*t)).0,
-        ].concat().try_into().unwrap())
+        let t = (c0 * c0 - mul_by_nonresidue((c1 * c1).0)).invert();
+        Fp12([(c0 * t).0, (-(c1 * t)).0].concat().try_into().unwrap())
     }
 
     pub fn print(&self) {
@@ -956,7 +947,12 @@ impl Fp12 {
     }
 
     pub fn get_u32_slice(&self) -> [[u32; 12]; 12] {
-        self.0.iter().map(|f| f.0).collect::<Vec<[u32; 12]>>().try_into().unwrap()
+        self.0
+            .iter()
+            .map(|f| f.0)
+            .collect::<Vec<[u32; 12]>>()
+            .try_into()
+            .unwrap()
     }
 }
 
@@ -1012,22 +1008,23 @@ pub fn mul_fp_12(x: Fp12, y: Fp12) -> Fp12 {
     let r0 = Fp6(y.0[0..6].try_into().unwrap());
     let r1 = Fp6(y.0[6..12].try_into().unwrap());
 
-    let t0 = c0*r0;
-    let t1 = c1*r1;
+    let t0 = c0 * r0;
+    let t1 = c1 * r1;
     let t2 = mul_by_nonresidue(t1.0);
-    let x = t0+t2;
+    let x = t0 + t2;
 
-    let t3 = c0+c1;
-    let t4 = r0+r1;
-    let t5 = t3*t4;
-    let t6 = t5-t0;
-    let y = t6-t1;
+    let t3 = c0 + c1;
+    let t4 = r0 + r1;
+    let t5 = t3 * t4;
+    let t6 = t5 - t0;
+    let y = t6 - t1;
 
     Fp12([x.0, y.0].concat().try_into().unwrap())
 }
 
 pub trait Pow
-where Self: Copy + Mul<Output = Self>,
+where
+    Self: Copy + Mul<Output = Self>,
 {
     fn pow(&self, one: Self, exp: BigUint) -> Self {
         if exp == 0u32.into() {
@@ -1036,19 +1033,17 @@ where Self: Copy + Mul<Output = Self>,
         if exp == 1u32.into() {
             return *self;
         }
-        if exp.clone()%2u32 == 1u32.into() {
-            return *self * self.pow(one, exp-1u32)
+        if exp.clone() % 2u32 == 1u32.into() {
+            return *self * self.pow(one, exp - 1u32);
         }
-        let d = self.pow(one, exp>>1);
+        let d = self.pow(one, exp >> 1);
         d * d
     }
 }
 
-impl<T> Pow for T
-where T: Copy + Mul<Output = Self> {}
+impl<T> Pow for T where T: Copy + Mul<Output = Self> {}
 
 impl Fp2 {
-
     pub fn forbenius_coefficients() -> [Fp; 2] {
         [
             Fp::get_fp_from_biguint(BigUint::from_str("1").unwrap()),
@@ -1057,15 +1052,11 @@ impl Fp2 {
     }
     pub fn forbenius_map(&self, pow: usize) -> Self {
         let constants = Fp2::forbenius_coefficients();
-        Fp2([
-            self.0[0],
-            self.0[1]*constants[pow%2]
-        ])
+        Fp2([self.0[0], self.0[1] * constants[pow % 2]])
     }
 }
 
 impl Fp6 {
-
     pub fn forbenius_coefficients_1() -> [Fp2; 6] {
         [
             Fp2([
@@ -1138,9 +1129,12 @@ impl Fp6 {
         // println!("--- fp6 forbenius map ---");
         Fp6([
             c0.forbenius_map(pow).0,
-            (c1.forbenius_map(pow) * fp6_frobenius_coefficients_1[pow%6]).0,
-            (c2.forbenius_map(pow) * fp6_frobenius_coefficients_2[pow%6]).0,
-        ].concat().try_into().unwrap())
+            (c1.forbenius_map(pow) * fp6_frobenius_coefficients_1[pow % 6]).0,
+            (c2.forbenius_map(pow) * fp6_frobenius_coefficients_2[pow % 6]).0,
+        ]
+        .concat()
+        .try_into()
+        .unwrap())
     }
 }
 
@@ -1213,11 +1207,18 @@ impl Fp12 {
         // println!("c2 - {:?}", c2.to_biguint());
         let coeff = fp12_forbenius_coefficients[pow % 12];
         // println!("coeff - {:?}", coeff.to_biguint());
-        Fp12([
-            r0.0,
-            [(c0*coeff).0, (c1*coeff).0, (c2*coeff).0].concat().try_into().unwrap()
-        ].concat().try_into().unwrap())
-
+        Fp12(
+            [
+                r0.0,
+                [(c0 * coeff).0, (c1 * coeff).0, (c2 * coeff).0]
+                    .concat()
+                    .try_into()
+                    .unwrap(),
+            ]
+            .concat()
+            .try_into()
+            .unwrap(),
+        )
     }
 }
 
@@ -1228,16 +1229,14 @@ impl Fp12 {
         let t0 = c0.multiply_by_01(o0, o1);
         let t1 = c1.multiply_by_1(o4);
         let t2 = mul_by_nonresidue(t1.0);
-        let x = t2+t0;
+        let x = t2 + t0;
 
-        let t3 = c1+c0;
-        let t4 = o1+o4;
+        let t3 = c1 + c0;
+        let t4 = o1 + o4;
         let t5 = t3.multiply_by_01(o0, t4);
-        let t6 = t5-t0;
-        let y = t6-t1;
-        Fp12([
-            x.0,y.0
-        ].concat().try_into().unwrap())
+        let t6 = t5 - t0;
+        let y = t6 - t1;
+        Fp12([x.0, y.0].concat().try_into().unwrap())
     }
 
     pub fn conjugate(&self) -> Self {
@@ -1287,14 +1286,12 @@ impl Fp12 {
         let t15 = t14 * two;
         let c5 = t15 + t1.1;
 
-        Fp12([
-            c0.0,
-            c1.0,
-            c2.0,
-            c3.0,
-            c4.0,
-            c5.0,
-        ].concat().try_into().unwrap())
+        Fp12(
+            [c0.0, c1.0, c2.0, c3.0, c4.0, c5.0]
+                .concat()
+                .try_into()
+                .unwrap(),
+        )
     }
 
     pub fn cyclotocmic_exponent(&self) -> Fp12 {
@@ -1308,7 +1305,7 @@ impl Fp12 {
         z
     }
 
-    pub fn final_exponentiate(&self) -> Self{
+    pub fn final_exponentiate(&self) -> Self {
         let t_0 = self.forbenius_map(6);
         let t_1 = t_0 / self.clone();
         let t_2 = t_1.forbenius_map(2);
@@ -1345,19 +1342,17 @@ impl Fp12 {
     }
 }
 
-
 pub fn inverse_fp2(x: Fp2) -> Fp2 {
     let t0 = x.0[0] * x.0[0];
     let t1 = x.0[1] * x.0[1];
     let t2 = t0 - (t1 * Fp2::non_residue());
-    let t3 = Fp::one()/t2;
-    Fp2([x.0[0]*t3, -(x.0[1]*t3)])
+    let t3 = Fp::one() / t2;
+    Fp2([x.0[0] * t3, -(x.0[1] * t3)])
 }
 
-
 pub fn calc_pairing_precomp(x: Fp2, y: Fp2, z: Fp2) -> Vec<[Fp2; 3]> {
-    let ax = x*(z.invert());
-    let ay = y*(z.invert());
+    let ax = x * (z.invert());
+    let ay = y * (z.invert());
 
     let qx = ax.clone();
     let qy = ay.clone();
@@ -1369,7 +1364,7 @@ pub fn calc_pairing_precomp(x: Fp2, y: Fp2, z: Fp2) -> Vec<[Fp2; 3]> {
 
     let mut ell_coeff: Vec<[Fp2; 3]> = Vec::<[Fp2; 3]>::new();
 
-    for i in (0..get_bls_12_381_parameter().bits()-1).rev() {
+    for i in (0..get_bls_12_381_parameter().bits() - 1).rev() {
         let t0 = ry * ry;
         let t1 = rz * rz;
         let x0 = t1.mul(Fp::get_fp_from_biguint(BigUint::from(3 as u32)));
@@ -1378,19 +1373,17 @@ pub fn calc_pairing_precomp(x: Fp2, y: Fp2, z: Fp2) -> Vec<[Fp2; 3]> {
         let t3 = t2.mul(Fp::get_fp_from_biguint(BigUint::from(3 as u32)));
         let x1 = ry * rz;
         let t4 = x1.mul(Fp::get_fp_from_biguint(BigUint::from(2 as u32)));
-        let x2 = t2-t0;
-        let x3 = rx*rx;
+        let x2 = t2 - t0;
+        let x3 = rx * rx;
         let x4 = x3.mul(Fp::get_fp_from_biguint(BigUint::from(3 as u32)));
 
         let x5 = -t4;
-        ell_coeff.push(
-            [x2, x4, x5]
-        );
+        ell_coeff.push([x2, x4, x5]);
 
         let k = mod_inverse(BigUint::from(2 as u32), modulus());
 
-        let x6 = t0-t3;
-        let x7 = rx*ry;
+        let x6 = t0 - t3;
+        let x7 = rx * ry;
         let x8 = x6 * x7;
 
         let x9 = t0 + t3;
@@ -1412,14 +1405,10 @@ pub fn calc_pairing_precomp(x: Fp2, y: Fp2, z: Fp2) -> Vec<[Fp2; 3]> {
             let bit1_t5 = bit1_t3 * qy;
             let bit1_t6 = bit1_t4 - bit1_t5;
             let bit1_t7 = -bit1_t1;
-            ell_coeff.push([
-                bit1_t6,
-                bit1_t7,
-                bit1_t3
-            ]);
-            let bit1_t8 = bit1_t3*bit1_t3;
+            ell_coeff.push([bit1_t6, bit1_t7, bit1_t3]);
+            let bit1_t8 = bit1_t3 * bit1_t3;
             let bit1_t9 = bit1_t8 * bit1_t3;
-            let bit1_t10 = bit1_t8* rx;
+            let bit1_t10 = bit1_t8 * rx;
             let bit1_t11 = bit1_t1 * bit1_t1;
             let bit1_t12 = bit1_t11 * rz;
             let bit1_t13 = bit1_t10 * Fp::get_fp_from_biguint(BigUint::from(2 as u32));
@@ -1436,7 +1425,6 @@ pub fn calc_pairing_precomp(x: Fp2, y: Fp2, z: Fp2) -> Vec<[Fp2; 3]> {
     return ell_coeff;
 }
 
-
 pub fn miller_loop(g1_x: Fp, g1_y: Fp, g2_x: Fp2, g2_y: Fp2, g2_z: Fp2) -> Fp12 {
     let precomputes = calc_pairing_precomp(g2_x, g2_y, g2_z);
     // for i in 0..precomputes.len() {
@@ -1451,18 +1439,18 @@ pub fn miller_loop(g1_x: Fp, g1_y: Fp, g2_x: Fp2, g2_y: Fp2, g2_z: Fp2) -> Fp12 
     let mut f12 = Fp12::one();
     let mut j = 0;
 
-    for i in (0..get_bls_12_381_parameter().bits()-1).rev() {
+    for i in (0..get_bls_12_381_parameter().bits() - 1).rev() {
         let ell_coeffs = precomputes[j];
-        f12 = f12.multiply_by_014(ell_coeffs[0], ell_coeffs[1]*px, ell_coeffs[2]*py);
+        f12 = f12.multiply_by_014(ell_coeffs[0], ell_coeffs[1] * px, ell_coeffs[2] * py);
         if get_bls_12_381_parameter().bit(i) {
             j += 1;
             let ell_coeffs = precomputes[j];
-            f12 = f12.multiply_by_014(ell_coeffs[0], ell_coeffs[1]*px, ell_coeffs[2]*py);
+            f12 = f12.multiply_by_014(ell_coeffs[0], ell_coeffs[1] * px, ell_coeffs[2] * py);
         }
-        if i!=0{
-            f12 = mul_fp_12(f12,f12);
+        if i != 0 {
+            f12 = mul_fp_12(f12, f12);
         }
-        j+=1;
+        j += 1;
     }
     f12.conjugate()
 }
@@ -1472,7 +1460,6 @@ pub fn pairing(p_x: Fp, p_y: Fp, q_x: Fp2, q_y: Fp2, q_z: Fp2) -> Fp12 {
     looped
     // looped.final_exponentiate()
 }
-
 
 pub fn verify_bls_signatures() -> bool {
     // Public key
@@ -1499,19 +1486,36 @@ pub fn verify_bls_signatures() -> bool {
 
     // 1. negate Signature
     let pk_x_negate = pk_x.clone();
-    let pk_y_negate = (modulus()-BigUint::new(pk_y)).to_u32_digits();
+    let pk_y_negate = (modulus() - BigUint::new(pk_y)).to_u32_digits();
 
     let pk_x_neg_fp = Fp::get_fp_from_biguint(BigUint::new(pk_x_negate));
     let pk_y_neg_fp = Fp::get_fp_from_biguint(BigUint::new(pk_y_negate));
 
-    let hmx_fp2 = Fp2([Fp::get_fp_from_biguint(BigUint::new(hm_x1)), Fp::get_fp_from_biguint(BigUint::new(hm_x2))]);
-    let hmy_fp2 = Fp2([Fp::get_fp_from_biguint(BigUint::new(hm_y1)), Fp::get_fp_from_biguint(BigUint::new(hm_y2))]);
-    let hmz_fp2 = Fp2([Fp::get_fp_from_biguint(BigUint::new(hm_z1)), Fp::get_fp_from_biguint(BigUint::new(hm_z2))]);
+    let hmx_fp2 = Fp2([
+        Fp::get_fp_from_biguint(BigUint::new(hm_x1)),
+        Fp::get_fp_from_biguint(BigUint::new(hm_x2)),
+    ]);
+    let hmy_fp2 = Fp2([
+        Fp::get_fp_from_biguint(BigUint::new(hm_y1)),
+        Fp::get_fp_from_biguint(BigUint::new(hm_y2)),
+    ]);
+    let hmz_fp2 = Fp2([
+        Fp::get_fp_from_biguint(BigUint::new(hm_z1)),
+        Fp::get_fp_from_biguint(BigUint::new(hm_z2)),
+    ]);
 
-
-    let sx_fp2 = Fp2([Fp::get_fp_from_biguint(BigUint::new(s_x1)), Fp::get_fp_from_biguint(BigUint::new(s_x2))]);
-    let sy_fp2 = Fp2([Fp::get_fp_from_biguint(BigUint::new(s_y1)), Fp::get_fp_from_biguint(BigUint::new(s_y2))]);
-    let sz_fp2 = Fp2([Fp::get_fp_from_biguint(BigUint::new(s_z1)), Fp::get_fp_from_biguint(BigUint::new(s_z2))]);
+    let sx_fp2 = Fp2([
+        Fp::get_fp_from_biguint(BigUint::new(s_x1)),
+        Fp::get_fp_from_biguint(BigUint::new(s_x2)),
+    ]);
+    let sy_fp2 = Fp2([
+        Fp::get_fp_from_biguint(BigUint::new(s_y1)),
+        Fp::get_fp_from_biguint(BigUint::new(s_y2)),
+    ]);
+    let sz_fp2 = Fp2([
+        Fp::get_fp_from_biguint(BigUint::new(s_z1)),
+        Fp::get_fp_from_biguint(BigUint::new(s_z2)),
+    ]);
 
     let g_x = Fp::get_fp_from_biguint(BigUint::new(gx));
     let g_y = Fp::get_fp_from_biguint(BigUint::new(gy));
@@ -1526,17 +1530,80 @@ pub fn verify_bls_signatures() -> bool {
     mu_finaexp == Fp12::one()
 }
 
-#[cfg(test)]   
+pub fn from(fq12: Fp12) -> Fq12 {
+    let c000 = Fq::from(fq12.0[0].to_biguint()); // w^0 u^0
+    let c001 = Fq::from(fq12.0[6].to_biguint()); // w^0 u^1
+    let c010 = Fq::from(fq12.0[2].to_biguint()); // w^2 u^0
+    let c011 = Fq::from(fq12.0[8].to_biguint()); // w^2 u^1
+    let c020 = Fq::from(fq12.0[4].to_biguint()); // w^4 u^0
+    let c021 = Fq::from(fq12.0[10].to_biguint()); // w^4 u^1
+    let c100 = Fq::from(fq12.0[1].to_biguint()); // w^1 u^0
+    let c101 = Fq::from(fq12.0[7].to_biguint()); // w^1 u^1
+    let c110 = Fq::from(fq12.0[3].to_biguint()); // w^3 u^0
+    let c111 = Fq::from(fq12.0[9].to_biguint()); // w^3 u^1
+    let c120 = Fq::from(fq12.0[5].to_biguint()); // w^5 u^0
+    let c121 = Fq::from(fq12.0[11].to_biguint()); // w^5 u^1
+
+    let c0 = Fq6::new(
+        Fq2::new(c000, c001),
+        Fq2::new(c010, c011),
+        Fq2::new(c020, c021),
+    );
+
+    let c1 = Fq6::new(
+        Fq2::new(c100, c101),
+        Fq2::new(c110, c111),
+        Fq2::new(c120, c121),
+    );
+    Fq12::new(c0, c1)
+}
+
+pub fn from_fq12(fq12: Fq12) {
+    // -> Fp12
+    let c0: Fq6 = fq12.c0;
+    let c1: Fq6 = fq12.c1;
+
+    let c00 = c0.c0;
+    let c01 = c0.c1;
+    let c02 = c0.c2;
+    let c10 = c1.c0;
+    let c11 = c1.c1;
+    let c12 = c1.c2;
+
+    let c000 = c00.c0; // w^0 u^0
+    let c001 = c00.c1; // w^0 u^1
+    let c010 = c01.c0; // w^2 u^0
+    let c011 = c01.c1; // w^2 u^1
+    let c020 = c02.c0; // w^4 u^0
+    let c021 = c02.c1; // w^4 u^1
+    let c100 = c10.c0; // w^1 u^0
+    let c101 = c10.c1; // w^1 u^1
+    let c110 = c11.c0; // w^3 u^0
+    let c111 = c11.c1; // w^3 u^1
+    let c120 = c12.c0; // w^5 u^0
+    let c121 = c12.c1; // w^5 u^1
+
+    let coeffs = [
+        c000, c100, c010, c110, c020, c120, c001, c101, c011, c111, c021, c121,
+    ];
+
+    // Fp12(coeffs)
+}
+
+#[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use ark_bls12_381::{G1Affine, G2Affine};
-    use ark_ec::AffineRepr;
+    use ark_bls12_381::{Fq12, G1Affine, G2Affine};
+    use ark_ec::{pairing::Pairing, AffineRepr};
+    use ark_ff::UniformRand;
     use num_bigint::BigUint;
 
-    use crate::native::{sub_u32_slices_12, Fp};
+    use crate::native::{from, sub_u32_slices_12, Fp};
 
-    use super::{get_u32_vec_from_literal, miller_loop, modulus, verify_bls_signatures, Fp12, Fp2, Fp6};
+    use super::{
+        get_u32_vec_from_literal, miller_loop, modulus, verify_bls_signatures, Fp12, Fp2, Fp6,
+    };
 
     #[test]
     pub fn test_bls_signature_verification() {
@@ -1558,7 +1625,6 @@ mod tests {
             "1385128161651935856764061834929068245137081648283968377947672499160305921464670953157912428887005620142387465559867",
             "101302147352745188522496764263445345397483945567997375025250825330209385517139484882425580831299520200841767383756"];
 
-
         let aa_fp12 = Fp12::from_str(aa);
         let mu_finaexp = aa_fp12.final_exponentiate();
         mu_finaexp.print();
@@ -1576,7 +1642,13 @@ mod tests {
         let g2_identity_y = Fp2::zero();
         let g2_identity_inf = Fp2::one();
 
-        let mlr = miller_loop(g1_generator_x, g1_generator_y, g2_identity_x, g2_identity_y, g2_identity_inf);
+        let mlr = miller_loop(
+            g1_generator_x,
+            g1_generator_y,
+            g2_identity_x,
+            g2_identity_y,
+            g2_identity_inf,
+        );
         let one = Fp12::one();
         assert_eq!(mlr, one);
     }
@@ -1589,7 +1661,6 @@ mod tests {
 
         let g2_generator_x_c1: BigUint = BigUint::from_str("3059144344244213709971259814753781636986470325476647558659373206291635324768958432433509563104347017837885763365758").unwrap();
         let g2_generator_x_c1 = Fp::get_fp_from_biguint(g2_generator_x_c1);
-
 
         let g2_generator_y_c0: BigUint = BigUint::from_str("1985150602287291935568054521177171638300868978215655730859378665066344726373823718423869104263333984641494340347905").unwrap();
         let g2_generator_y_c0 = Fp::get_fp_from_biguint(g2_generator_y_c0);
@@ -1606,10 +1677,45 @@ mod tests {
         g2_identity_y.0[0] = g2_generator_y_c0;
         g2_identity_y.0[1] = g2_generator_y_c1;
         let g2_identity_inf = Fp2::zero();
-        
-        let mlr = miller_loop(g1_generator_x, g1_generator_y, g2_identity_x, g2_identity_y, g2_identity_inf);
+
+        let mlr = miller_loop(
+            g1_generator_x,
+            g1_generator_y,
+            g2_identity_x,
+            g2_identity_y,
+            g2_identity_inf,
+        );
         let one = Fp12::one();
         assert_eq!(mlr, one);
+    }
+
+    #[test]
+    fn test_miller_loop_native() {
+        let rng = &mut rand::thread_rng();
+        let p0 = G1Affine::rand(rng);
+        let q0 = G2Affine::rand(rng);
+        let g1_x: BigUint = p0.x().unwrap().0.into();
+        let g1_x = Fp::get_fp_from_biguint(g1_x);
+        let g1_y: BigUint = p0.y().unwrap().0.into();
+        let g1_y = Fp::get_fp_from_biguint(g1_y);
+        let g2_x_c0: BigUint = q0.x().unwrap().c0.0.into();
+        let g2_x_c1: BigUint = q0.x().unwrap().c1.0.into();
+        let g2_x = Fp2([
+            Fp::get_fp_from_biguint(g2_x_c0),
+            Fp::get_fp_from_biguint(g2_x_c1),
+        ]);
+        let g2_y_c0: BigUint = q0.y().unwrap().c0.0.into();
+        let g2_y_c1: BigUint = q0.y().unwrap().c1.0.into();
+        let g2_y = Fp2([
+            Fp::get_fp_from_biguint(g2_y_c0),
+            Fp::get_fp_from_biguint(g2_y_c1),
+        ]);
+        let g2_z = Fp2::zero();
+        let ark_miller_loop_result = ark_bls12_381::Bls12_381::miller_loop(p0, q0).0;
+        let mlr = miller_loop(g1_x, g1_y, g2_x, g2_y, g2_z);
+        let mlr = from(mlr);
+
+        assert_eq!(ark_miller_loop_result, mlr);
     }
 
     #[test]
@@ -1619,6 +1725,6 @@ mod tests {
         let x_u32 = get_u32_vec_from_literal(x.clone());
         let y_u32 = get_u32_vec_from_literal(y.clone());
         let (res, _carries) = sub_u32_slices_12(&x_u32, &y_u32);
-        assert_eq!( x-y, BigUint::new(res.to_vec()));
+        assert_eq!(x - y, BigUint::new(res.to_vec()));
     }
 }
